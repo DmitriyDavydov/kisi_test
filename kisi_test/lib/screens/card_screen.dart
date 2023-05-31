@@ -1,114 +1,157 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kisi_test/services/permission_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class CardScreen extends StatefulWidget {
-  const CardScreen({super.key});
+  final int id;
+  final String authToken;
+  final String phoneKey;
+  final String certificate;
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+  const CardScreen({
+    Key? key,
+    required this.id,
+    required this.authToken,
+    required this.phoneKey,
+    required this.certificate,
+  }) : super(key: key);
 
   @override
   State<CardScreen> createState() => _CardScreenState();
 }
 
 class _CardScreenState extends State<CardScreen> {
-  static const platform = MethodChannel('samples.flutter.dev/kisi');
+  static const platform = MethodChannel('kisi.test/kisi_channel');
   final permissionService = PermissionService();
+  bool _isAccessingViaKisi = false;
 
-// Get battery level.
-  String _batteryLevel = 'Unknown battery level.';
+  void checkPermissions() async {
+    var bluetoothStatus = await permissionService.checkBluetoothPermission();
+    var locationStatus = await permissionService.checkLocationPermission();
 
-  Future<void> _getBatteryLevel() async {
-    String batteryLevel;
+    if (Platform.isAndroid) {
+      if (locationStatus.isGranted) {
+        _invokeKisiMethod(
+          id: widget.id,
+          authToken: widget.authToken,
+          phoneKey: widget.phoneKey,
+          certificate: widget.certificate,
+        );
+      }
+      if (!locationStatus.isGranted) {
+        _showErrorSnackBar('Location permission should be granted.');
+      }
+    }
+
+    if (Platform.isIOS) {
+      if (bluetoothStatus.isGranted && locationStatus.isGranted) {
+        _invokeKisiMethod();
+      }
+      if (!bluetoothStatus.isGranted) {
+        _showErrorSnackBar('Bluetooth permission should be granted.');
+      }
+      if (!locationStatus.isGranted) {
+        _showErrorSnackBar('Location permission should be granted.');
+      }
+    }
+  }
+
+  Future<void> _invokeKisiMethod({
+    int? id,
+    String? authToken,
+    String? phoneKey,
+    String? certificate,
+  }) async {
     try {
-      final int result = await platform.invokeMethod('getBatteryLevel');
-      batteryLevel = 'Battery level at $result % .';
+      final bool result = await platform.invokeMethod(
+        'kisiTapToAccess',
+        {
+          'id': id,
+          'authToken': authToken,
+          'phoneKey': phoneKey,
+          'certificate': certificate,
+        },
+      );
+      print('Native method triggered: $result');
+      setState(() {
+        _isAccessingViaKisi = true;
+      });
     } on PlatformException catch (e) {
-      batteryLevel = "Failed to get battery level: '${e.message}'.";
+      print(e.message);
     }
-
-    setState(() {
-      _batteryLevel = batteryLevel;
-    });
   }
 
-  /*
-  Future<void> requestPermissions() async {
-    final permissionStatus = await Permission.location.request();
-    if (permissionStatus.isDenied) {
-      // Handle denied location permission
-    }
-
-    final bluetoothPermissionStatus = await Permission.bluetooth.request();
-    if (bluetoothPermissionStatus.isDenied) {
-      // Handle denied Bluetooth permission
-    }
-/*
-    final nfcPermissionStatus = await Permission.request();
-    if (nfcPermissionStatus.isDenied) {
-      // Handle denied NFC permission
-    }
-
- */
+  Future<void> _accessViaKisi() async {
+    permissionService.requestBluetoothPermission();
+    permissionService.requestLocationPermission();
+    checkPermissions();
   }
 
-   */
+  void _showErrorSnackBar(String errorMessage) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(errorMessage),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Scan the reader to unlock to get start',
-                style: Theme.of(context).textTheme.headlineSmall,
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(
-                width: MediaQuery.of(context).size.width / 2,
-                child: ElevatedButton(
-                  /*
-                        onPressed: () async {
-                          setState(() {
-                            isLoading = true;
-                          });
-                          final response = networkService.login(
-                            email: _emailController.text,
-                            password: _emailController.text,
-                          );
-                          print('printing response');
-                          print(response);
-                          print(response);
-                        },
-                         */
-                  //onPressed: _getBatteryLevel,
-                  onPressed: permissionService.requestMultiplePermissions,
-                  child: Text(
-                    _batteryLevel,
-                    style: const TextStyle(fontSize: 18.0),
-                  ),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Align(
+              alignment: AlignmentDirectional.topStart,
+              child: IconButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                icon: const Icon(
+                  Icons.arrow_back,
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _isAccessingViaKisi
+                        ? "Tap your phone to unlock the door"
+                        : 'Press the button below, set permissions and tap your device to unlock the door',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      top: 32.0,
+                    ),
+                    child: _isAccessingViaKisi
+                        ? const CircularProgressIndicator()
+                        : SizedBox(
+                            width: MediaQuery.of(context).size.width / 2,
+                            child: ElevatedButton(
+                              onPressed: _accessViaKisi,
+                              child: const Text(
+                                'START',
+                                style: TextStyle(fontSize: 18.0),
+                              ),
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

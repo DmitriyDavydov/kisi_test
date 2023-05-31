@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
+import 'package:kisi_test/models/login_access_token.dart';
+import 'package:kisi_test/models/user_kisi_details.dart';
 
 class NetworkService {
   final Dio dio;
@@ -10,32 +14,43 @@ class NetworkService {
     required this.dio,
     required String baseUrl,
   }) {
-    _baseUrl = baseUrl;
+    dio.options.baseUrl = baseUrl;
   }
 
-  Future<Response> login({
+  Future<void> login({
     required String email,
     required String password,
   }) async {
     try {
       final response = await dio.post(
-        '$baseUrl/api/login',
+        '/api/login',
         queryParameters: {
           'email': email,
           'password': password,
         },
       );
-      return response;
+
+      final jsonData = json.decode(json.encode(response.data));
+      final accessToken = LoginAccessToken.fromJson(jsonData).token;
+
+      dio.options.headers['Authorization'] = 'Bearer $accessToken';
     } on DioError catch (e) {
       throw Exception('Error occurred: $e');
     }
   }
 
-  void getUserToken() async {
-    print('Network request!');
-    final response = await dio.get(
-      '$baseUrl/api/kisi/get-user-token',
-    );
-    print(response);
+  Future<UserKisiDetails> getUserKisiDetails() async {
+    try {
+      final response = await dio.get(
+        '/api/kisi/user-kisi-token',
+      );
+
+      final jsonData = json.decode(json.encode(response.data));
+      final userKisiDetails = UserKisiDetails.fromJson(jsonData);
+
+      return userKisiDetails;
+    } on DioError catch (e) {
+      throw Exception('Error occurred: $e');
+    }
   }
 }

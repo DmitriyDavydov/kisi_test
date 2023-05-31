@@ -1,21 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:kisi_test/screens/card_screen.dart';
 import 'package:kisi_test/services/network_service.dart';
 
+import 'card_screen.dart';
+
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -24,42 +14,48 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final networkService = NetworkService(
+    dio: Dio(),
+    baseUrl: 'https://aspen.bridgewaterlabs.com',
+  );
   bool _isLoading = false;
 
-  void _login() {
-    final networkService = NetworkService(
-      dio: Dio(),
-      baseUrl: 'https://aspen.bridgewaterlabs.com',
-    );
-
+  Future<void> _login() async {
     setState(() {
       _isLoading = true;
     });
 
-    networkService
-        .login(email: _emailController.text, password: _passwordController.text)
-        .then((response) {
-      setState(() {
-        if (response.statusCode == 200) {
-          print('Responce is ok');
-          setState(() {
-            _isLoading = false;
-            _emailController.text = '';
-            _passwordController.text = '';
+    try {
+      await networkService.login(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
 
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const CardScreen()),
-            );
-          });
-        }
+      final userKisiDetails = await networkService.getUserKisiDetails();
+
+      setState(() {
+        _isLoading = false;
+        _emailController.text = '';
+        _passwordController.text = '';
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CardScreen(
+              id: userKisiDetails.id,
+              authToken: userKisiDetails.authToken,
+              phoneKey: userKisiDetails.phoneKey,
+              certificate: userKisiDetails.certificate,
+            ),
+          ),
+        );
       });
-    }).catchError((error) {
+    } catch (e) {
       setState(() {
         _isLoading = false;
       });
-      _showErrorSnackBar('Error: $error');
-    });
+      _showErrorSnackBar('Error occurred');
+    }
   }
 
   void _showErrorSnackBar(String errorMessage) {
@@ -73,12 +69,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       body: Center(
         child: Padding(
@@ -114,20 +104,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     SizedBox(
                       width: MediaQuery.of(context).size.width / 2,
                       child: ElevatedButton(
-                        /*
-                        onPressed: () async {
-                          setState(() {
-                            isLoading = true;
-                          });
-                          final response = networkService.login(
-                            email: _emailController.text,
-                            password: _emailController.text,
-                          );
-                          print('printing response');
-                          print(response);
-                          print(response);
-                        },
-                         */
                         onPressed: _login,
                         child: const Text(
                           'Login',
